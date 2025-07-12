@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>MakeDesigns :- System Design Tool</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: linear-gradient(135deg, #c3ecf8, #f0f4f8);
+    }
+
+    #typewriter {
+      text-align: center;
+      font-weight: bold;
+      font-size: 2rem;
+      margin-bottom: 20px;
+    }
+
+    .rainbow-text {
+      display: inline-block;
+      background: linear-gradient(90deg, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #f59e0b, #06b6d4);
+      background-size: 400% 100%;
+      background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+      -webkit-text-fill-color: transparent;
+      animation: rainbow-text 6s linear infinite, glow-pulse 3s ease-in-out infinite;
+    }
+
+    @keyframes rainbow-text {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+
+    @keyframes glow-pulse {
+      0%, 100% { text-shadow: 0 0 4px rgba(255,255,255,0.2); }
+      50% { text-shadow: 0 0 12px rgba(255,255,255,0.4); }
+    }
+
+    .toolbox {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    button {
+      margin: 6px;
+      padding: 10px 18px;
+      background: rgba(37, 99, 235, 0.9);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      transition: background 0.2s, transform 0.2s;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+      transform: scale(1.03);
+    }
+
+    button.active {
+      background-color: #059669;
+    }
+
+    .canvas {
+      width: 100%;
+      height: 500px;
+      border: 2px dashed rgba(148, 163, 184, 0.5);
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(20px);
+      border-radius: 16px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.1) inset;
+    }
+
+    .block {
+      position: absolute;
+      padding: 14px;
+      text-align: center;
+      font-weight: bold;
+      user-select: none;
+      color: #0f172a;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+      cursor: move;
+      resize: both;
+      overflow: auto;
+      min-width: 60px;
+      min-height: 40px;
+      transition: box-shadow 0.2s;
+    }
+
+    .block:hover {
+      box-shadow: 0 8px 36px rgba(0, 0, 0, 0.2);
+    }
+
+    .rectangle, .square {
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+    }
+
+    .circle {
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.35);
+      border: 2px solid rgba(255, 255, 255, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/leader-line@1.0.7/leader-line.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <h1 id="typewriter" class="rainbow-text">🧠 MakeDesigns :- A System Design Tool</h1>
+  <div class="toolbox">
+    <input type="text" id="promptText" placeholder="Enter items separated by -> or ," style="padding: 8px; width: 300px; margin: 6px; border-radius: 8px; border: 1px solid #ccc;">
+    <button onclick="generateFromPrompt()">✨ Generate</button>
+    <input type="text" id="customBlockLabel" placeholder="Custom Block Label" style="padding: 8px; margin: 6px; border-radius: 8px; border: 1px solid #ccc;">
+    <select id="blockShape" style="padding: 8px; border-radius: 8px;">
+      <option value="rectangle">Rectangle</option>
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+    </select>
+    <button onclick="addCustomBlock()">➕ Custom Block</button>
+    <button id="connect-btn" onclick="toggleConnectMode()">🔗 Connect Mode</button>
+    <button onclick="downloadAsPNG()">🖼️ Export PNG</button>
+    <button onclick="downloadAsPDF()">📄 Export PDF</button>
+    <button onclick="clearCanvas()">🗑️ Delete All</button>
+  </div>
+  <div id="canvas" class="canvas"></div>
+  <script>
+    let lines = [];
+    let activeLines = [];
+    let blockId = 0;
+    let connectMode = false;
+    let firstBlock = null;
+
+    function createBlock(label, shape = 'rectangle') {
+      const block = document.createElement('div');
+      block.className = `block ${shape}`;
+      block.textContent = label;
+      block.id = `block-${blockId++}`;
+      makeDraggable(block);
+      block.addEventListener('click', e => {
+        if (!connectMode) return;
+        e.stopPropagation();
+        if (!firstBlock) {
+          firstBlock = block;
+          block.style.borderColor = 'green';
+        } else {
+          const line = new LeaderLine(firstBlock, block, { color: '#6b7280', size: 2 });
+          activeLines.push(line);
+          lines.push({ from: firstBlock.id, to: block.id });
+          firstBlock.style.borderColor = '';
+          firstBlock = null;
+        }
+      });
+      return block;
+    }
+
+    function makeDraggable(el) {
+      let offsetX, offsetY, isDragging = false;
+      el.addEventListener('mousedown', e => {
+        isDragging = true;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+        document.onmousemove = e => {
+          if (!isDragging) return;
+          const rect = document.getElementById('canvas').getBoundingClientRect();
+          el.style.left = `${e.clientX - rect.left - offsetX}px`;
+          el.style.top = `${e.clientY - rect.top - offsetY}px`;
+          updateLines();
+        };
+        document.onmouseup = () => {
+          isDragging = false;
+          document.onmousemove = null;
+          document.onmouseup = null;
+        };
+      });
+    }
+
+    function updateLines() {
+      activeLines.forEach(line => line.position());
+    }
+
+    function addCustomBlock() {
+      const label = document.getElementById('customBlockLabel').value.trim();
+      const shape = document.getElementById('blockShape').value;
+      if (!label) return alert('⚠️ Please enter a label for the block.');
+      const block = createBlock(label, shape);
+      block.style.left = '100px';
+      block.style.top = '100px';
+      document.getElementById('canvas').appendChild(block);
+    }
+
+    function toggleConnectMode() {
+      connectMode = !connectMode;
+      firstBlock = null;
+      const btn = document.getElementById('connect-btn');
+      btn.classList.toggle('active', connectMode);
+      btn.textContent = connectMode ? '🟢 Connecting...' : '🔗 Connect Mode';
+    }
+
+    function clearCanvas() {
+      document.getElementById('canvas').innerHTML = '';
+      lines = [];
+      activeLines.forEach(line => line.remove());
+      activeLines = [];
+      blockId = 0;
+    }
+
+    function generateFromPrompt() {
+      const prompt = document.getElementById('promptText').value.trim();
+      if (!prompt) return alert('⚠️ Please enter a valid prompt.');
+      const rawItems = prompt.split(/->|→|=>|,/);
+      const items = rawItems.map(p => p.trim()).filter(Boolean);
+      if (items.length < 2) {
+        alert(`⚠️ Please enter at least two items to generate diagram. You provided: ${items.length}`);
+        return;
+      }
+      clearCanvas();
+      const created = {};
+      const spacing = 200;
+      const startX = 60;
+      const startY = 150;
+      items.forEach((label, i) => {
+        const block = createBlock(label, 'rectangle');
+        block.style.left = `${startX + i * spacing}px`;
+        block.style.top = `${startY}px`;
+        document.getElementById('canvas').appendChild(block);
+        created[label] = block;
+      });
+      requestAnimationFrame(() => {
+        for (let i = 0; i < items.length - 1; i++) {
+          const from = created[items[i]];
+          const to = created[items[i + 1]];
+          if (from && to) {
+            const line = new LeaderLine(from, to, { color: '#6b7280', size: 2 });
+            activeLines.push(line);
+            lines.push({ from: from.id, to: to.id });
+          }
+        }
+      });
+    }
+
+    function downloadAsPNG() {
+      html2canvas(document.getElementById('canvas')).then(canvas => {
+        const link = document.createElement('a');
+        link.download = 'design.png';
+        link.href = canvas.toDataURL();
+        link.click();
+      });
+    }
+
+    function downloadAsPDF() {
+      html2canvas(document.getElementById('canvas')).then(canvas => {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF();
+        const imgData = canvas.toDataURL('image/png');
+        pdf.addImage(imgData, 'PNG', 10, 10, 190, 100);
+        pdf.save('design.pdf');
+      });
+    }
+  </script>
+</body>
+</html>
